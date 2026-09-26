@@ -2,6 +2,20 @@
 
 格式：每版按 新增 / 改进 / 修复 / 已知限制 / 下载 归类，人话版，不是提交列表。
 
+## v1.0.1 — 2026-09-26
+
+> 从这一版起版本号重新从 1.0.x 开始计，主仓库迁移到 [ismoshushi/jev-chat-jarvis](https://github.com/ismoshushi/jev-chat-jarvis)。
+
+**新增**
+- 集成 Google Analytics（Firebase Analytics）匿名统计：只上报启动次数、页面访问、崩溃率这类使用数据，**不采集任何聊天文字、截图或配置**。隐私政策已同步更新（PRIVACY.md v1.1）。
+
+**改进**
+- 设置页「开源仓库」入口指向新仓库地址。
+- 升级说明：versionCode 从上一版继续递增，老用户可直接覆盖安装。
+
+**已知限制**
+- 统计依赖 Google Play Services；没有 Play 服务或网络不通的手机上统计不生效，功能完全不受影响。
+
 ## 未发布
 
 **改进**

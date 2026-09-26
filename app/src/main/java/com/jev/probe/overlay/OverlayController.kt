@@ -56,7 +56,7 @@ class OverlayController(private val ctx: Context) {
     var onOcrCapture: (() -> Unit)? = null
 
     /** Bubble panel / menu → read the clipboard and analyze the copied text
-     *  (the manual-only app's path). Runs inside the [withFocus] focus window. */
+     *  (the unadapted-app paste path). Runs inside the [withFocus] focus window. */
     var onClipboardAnalyze: (() -> Unit)? = null
 
     /** How much knowledge context the last analysis actually used. */
@@ -248,7 +248,7 @@ class OverlayController(private val ctx: Context) {
             layoutParams = FrameLayout.LayoutParams(dp(196), ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(56) }
         }
         menu.addView(menuItem("粘贴分析") { root?.removeView(menu); onClipboardAnalyze?.invoke() })
-        menu.addView(menuItem("截屏识别一次") { root?.removeView(menu); onOcrCapture?.invoke() })
+        menu.addView(menuItem("截屏分析一次") { root?.removeView(menu); onOcrCapture?.invoke() })
         menu.addView(menuItem("把当前会话存为联系人") { onSaveContact?.invoke(); root?.removeView(menu) })
         menu.addView(menuItem("打开设置") { openSettings(); root?.removeView(menu) })
         menu.addView(menuItem("隐藏助手（本次）") { hide() })
@@ -297,49 +297,66 @@ class OverlayController(private val ctx: Context) {
      * Android 10+ only lets the focused app (or the default IME) read the
      * clipboard — an accessibility service is NOT exempt (AOSP
      * ClipboardService has no accessibility branch). The overlay window is
-     * normally FLAG_NOT_FOCUSABLE; dropping that flag for ~150 ms makes WMS
-     * move input focus to this overlay-layer window, and inside that window
-     * ClipboardManager.primaryClip succeeds. The flag is restored right after
-     * (the chat app regains focus; the IME may close once). [work] runs on the
-     * main thread.
+     * normally FLAG_NOT_FOCUSABLE; dropping that flag makes WMS move input
+     * focus to this overlay-layer window, and while it holds focus
+     * ClipboardManager.primaryClip succeeds.
+     *
+     * [work] returns true when it got what it came for, false to be retried:
+     * WMS focus handover can lag the flag change by several hundred ms (MIUI
+     * is the worst offender), so a single read right after the flag flip
+     * fails "sometimes". Retries run while the window is still focusable —
+     * cumulative ~1.4 s — then the flag is restored (the chat app regains
+     * focus; the IME may close once). If every attempt returned false,
+     * [onGiveUp] runs so the caller can tell the user. [work] and
+     * [onGiveUp] run on the main thread.
      */
-    fun withFocus(work: () -> Unit) {
+    fun withFocus(onGiveUp: () -> Unit = {}, work: () -> Boolean) {
         val r = root
         val params = lp
-        if (r == null || params == null) { work(); return }
+        if (r == null || params == null) { if (!work()) onGiveUp(); return }
         try {
             params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
             wm.updateViewLayout(r, params)
-        } catch (e: Exception) { work(); return }
-        r.postDelayed({
-            try { work() } finally {
+        } catch (e: Exception) { if (!work()) onGiveUp(); return }
+        // First try at 150 ms (the old wait), then longer gaps while WMS
+        // catches up. Total focusable window ≈ 1.4 s — short enough that the
+        // chat app barely notices, long enough to cover MIUI's handover lag.
+        val gaps = longArrayOf(150, 250, 350, 400, 500)
+        var i = 0
+        val task = object : Runnable {
+            override fun run() {
+                val done = try { work() } catch (e: Exception) { true }
+                if (!done && i < gaps.size) { r.postDelayed(this, gaps[i]); i += 1; return }
                 params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                 runCatching { wm.updateViewLayout(r, params) }
+                if (!done) onGiveUp()
             }
-        }, 150)
+        }
+        r.postDelayed(task, gaps[i]); i += 1
     }
 
     // ------------------------------------------------------------ public API
 
     fun showIdle(title: String?, captureButton: Boolean = false, clipboard: Boolean = false) {
         ensureRoot(); bubble?.alpha = 0.55f
-        // clipboard mode (manual-only app): the primary action is the clipboard read —
-        // the user long-presses a message in the chat, copies it, then taps this.
-        if (clipboard) {
-            setContent(listOf(
-                bigButton("粘贴分析") { onClipboardAnalyze?.invoke() },
-                hint("长按对方消息 → 复制，再点上面按钮")))
-            return
-        }
-        // captureButton mode (manual-only apps): the panel's primary action is
-        // always the screenshot button — automatic capture is off there, so
-        // "分析当前对话" would be a dead button. Always re-set the content so a
-        // stale panel from another app cannot survive the app switch.
-        if (captureButton) {
-            setContent(listOf(
-                bigButton("截屏识别") { onOcrCapture?.invoke() },
-                hint("点上方按钮手动截屏识别当前聊天")
-            ))
+        // Generic unadapted-app panel. The two manual paths are mutually
+        // exclusive per app: apps the system can capture get ONLY "截屏分析"
+        // (captureButton); capture-blocked apps get ONLY "粘贴分析"
+        // (clipboard) — their screenshots always come back black, so offering
+        // a dead button there is noise. Both flags set → both buttons (kept
+        // for flexibility, no caller uses it today). Always re-set the content
+        // so a stale panel from another app cannot survive the app switch.
+        if (captureButton || clipboard) {
+            val items = ArrayList<View>()
+            if (captureButton) {
+                items.add(bigButton("截屏分析") { onOcrCapture?.invoke() })
+                items.add(hint("点上方按钮截屏分析当前聊天"))
+            }
+            if (clipboard) {
+                items.add(bigButton("粘贴分析") { onClipboardAnalyze?.invoke() })
+                items.add(hint("长按对方消息 → 复制，再点粘贴分析"))
+            }
+            setContent(items)
             return
         }
         // Either there is genuinely nothing to show yet, or the panel is empty

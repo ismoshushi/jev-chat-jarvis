@@ -1,0 +1,89 @@
+# Release APK on tag push.
+#
+# Usage:
+#   git tag v1.0.2 && git push origin v1.0.2
+#
+# → builds a SIGNED release APK when the four ANDROID_* secrets are set,
+#   falls back to a debug APK otherwise, and attaches it to a GitHub
+#   Release users can download from the repo's Releases page.
+#
+# Secrets (repo → Settings → Secrets and variables → Actions):
+#   ANDROID_KEYSTORE_BASE64 — base64 of the release keystore (.jks)
+#   ANDROID_STORE_PASSWORD  — keystore password
+#   ANDROID_KEY_ALIAS       — key alias (jev)
+#   ANDROID_KEY_PASSWORD    — key password
+
+name: Release APK
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      HAS_KEY: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The keystore NEVER enters the repo or the logs: it is decoded from a
+      # write-only Actions secret into $RUNNER_TEMP, used by gradle, and
+      # discarded with the runner.
+      - name: Restore release keystore from secrets
+        if: env.HAS_KEY == 'true'
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASS: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/keystore.jks"
+          {
+            echo "storeFile=$RUNNER_TEMP/keystore.jks"
+            echo "storePassword=$STORE_PASS"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASS"
+          } > "$RUNNER_TEMP/keystore.properties"
+
+      - name: Build signed release APK
+        if: env.HAS_KEY == 'true'
+        env:
+          JEV_KEYSTORE_PROPS: ${{ runner.temp }}/keystore.properties
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: ${{ github.ref_name }}
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Build debug APK (no signing secrets set yet)
+        if: env.HAS_KEY != 'true'
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: ${{ github.ref_name }}
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Create GitHub Release with APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            SRC=app/build/outputs/apk/release/app-release.apk
+            NAME="jev-assistant-${TAG}.apk"
+          else
+            SRC=app/build/outputs/apk/debug/app-debug.apk
+            NAME="jev-assistant-${TAG}-debug.apk"
+          fi
+          cp "$SRC" "$NAME"
+          gh release create "$TAG" "$NAME" \
+            --title "Jev助手 $TAG" \
+            --notes "下载 APK 安装（允许未知来源）。更新内容见 [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)。"

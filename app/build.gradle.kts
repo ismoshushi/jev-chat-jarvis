@@ -4,13 +4,14 @@ import java.util.Properties
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("com.google.gms.google-services")
 }
 
 // Release signing: reads a properties file kept OUTSIDE the repo
 // (storeFile / storePassword / keyAlias / keyPassword). Override the path with
 // the JEV_KEYSTORE_PROPS env var. Without it, release builds are unsigned.
 val releaseProps = Properties().apply {
-    val f = file(System.getenv("JEV_KEYSTORE_PROPS") ?: "H:/android/keys/jev-release.properties")
+    val f = file(System.getenv("JEV_KEYSTORE_PROPS") ?: "D:/Hoo/android-keys/jev-release.properties")
     if (f.exists()) FileInputStream(f).use { load(it) }
 }
 
@@ -19,11 +20,14 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.jev.probe"
+        applicationId = "xyz.moshushi.app.jevchat"
         minSdk = 30
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.4"
+        // CI (release.yml) overrides both from the pushed tag: versionName
+        // = tag minus the leading "v", versionCode = the workflow run number
+        // (always increasing). Local builds fall back to these defaults.
+        versionCode = (System.getenv("VERSION_CODE") ?: "1").toInt()
+        versionName = System.getenv("VERSION_NAME") ?: "1.0.1"
 
         // ML Kit's bundled Chinese recognizer ships native libs for every ABI.
         // The target phone (and every phone this can run on: minSdk 30) is
@@ -71,6 +75,8 @@ android {
 }
 
 dependencies {
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-analytics")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")

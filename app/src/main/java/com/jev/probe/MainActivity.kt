@@ -28,8 +28,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var prefs: Prefs
     private lateinit var container: LinearLayout
-    private val a11yComponent =
-        "com.jev.probe/com.google.android.accessibility.selecttospeak.SelectToSpeakService"
+    private val a11yComponent get() =
+        "$packageName/com.google.android.accessibility.selecttospeak.SelectToSpeakService"
 
     private val accent = Color.parseColor("#3A7AFE")
     private val green = Color.parseColor("#16A34A")
@@ -53,6 +53,8 @@ class MainActivity : AppCompatActivity() {
         container.padForSystemBars()   // edge-to-edge: keep the title off the status bar
         scroll.addView(container)
         setContentView(scroll)
+
+        Analytics.logScreen("main")
     }
 
     override fun onResume() {
@@ -64,7 +66,7 @@ class MainActivity : AppCompatActivity() {
         container.removeAllViews()
 
         container.addView(text("Jev 聊天助手", 24f, ink, bold = true))
-        container.addView(text("在聊天 App 旁读对方消息（QQ、X、飞书自动读取；其他 App 用面板里的「截屏识别」手动截图识别），给出判断和候选回复。发送始终由你手动点。",
+        container.addView(text("在聊天 App 旁给判断和候选回复。QQ、X、飞书自动读取；其他任何聊天 App 通用支持——气泡面板里点「截屏分析」截图识别（个别系统禁截屏的 App 用「粘贴分析」），无需逐个适配。发送始终由你手动点。",
             13f, sub).apply { setPadding(0, dp(6), 0, dp(16)) })
 
         val a11y = isA11yEnabled()

@@ -46,16 +46,12 @@ open class ChatCaptureService : AccessibilityService() {
     private val main = Handler(Looper.getMainLooper())
     private val worker = Executors.newFixedThreadPool(2)
 
-    /** Adapted chat apps, keyed by package name.
-     *  The manual-only app (see [PKG_MANUAL_ONLY]) is intentionally NOT wired
-     *  in: automatic reading there (node tree / auto screenshot / auto OCR)
-     *  risks triggering its anti-screenshot risk control. Its capture route is
-     *  the clipboard instead (see [clipboardAnalyzeManual] / [withFocus]):
-     *  the user copies a message in the chat, taps 粘贴分析, and the copied
-     *  text becomes a single-message snapshot. Bubble-parking short-circuit
-     *  otherwise (see [maybeCapture] / [onAccessibilityEvent]).
-     *  [ManualOnlyAdapter] is kept in the codebase for a possible future
-     *  restore, just not used here. */
+    /** Adapted chat apps, keyed by package name. Everything else — ANY chat
+     *  app not in this map — runs the same generic flow: parked bubble with a
+     *  "截屏分析" panel button (manual screenshot → OCR with side detection →
+     *  analysis), a "粘贴分析" button, and copy-to-clipboard replies. No
+     *  per-app wiring is ever needed; a new adapter only upgrades an app from
+     *  generic to automatic. */
     private val adapters = listOf(QQAdapter(), XAdapter(), FeishuAdapter()).associateBy { it.pkg }
 
     /** Submit to the worker, ignoring rejection after the service is torn down
@@ -158,31 +154,45 @@ open class ChatCaptureService : AccessibilityService() {
         //
         // An app with no adapter is NOT a reason to take the bubble away: the only
         // way into DingTalk / Telegram / anything else is the manual screenshot
-        // button — the panel's "截屏识别" (captureButton mode) or the bubble
-        // menu's "截屏识别一次" — and a bubble that is gone cannot be tapped. So
+        // button — the panel's "截屏分析" (captureButton mode) or the bubble
+        // menu's "截屏分析一次" — and a bubble that is gone cannot be tapped. So
         // we park the idle bubble there instead — still no automatic capture, no
         // analysis.
         // The bubble does come off for places where it would only be in the way:
         // our own settings screens, the launcher, and the system UI.
         if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val fg = rootInActiveWindow?.packageName?.toString()
-            // Manual-only app: bubble-only mode. The bubble stays parked (same
-            // as an unadapted app) so the menu stays reachable, but automatic
-            // reading — node tree, auto screenshot, auto OCR, fill — never runs:
-            // touching any of that is what trips its anti-screenshot risk control.
-            if (fg == PKG_MANUAL_ONLY) {
-                foregroundPkg = fg
-                currentSnapshot = null // drop the previous app's chat, if any
-                main.post { overlay?.showIdle(null, captureButton = true, clipboard = true) }
-                return
-            }
             if (fg != null && fg !in adapters) {
+                // Our own overlay window can briefly BECOME the active window
+                // while withFocus() holds input focus for a clipboard read.
+                // Reacting to that used to hide the whole overlay the instant
+                // the user tapped 粘贴分析 (fg == packageName → drop), and the
+                // bubble never came back because no window-state event fires
+                // when focus returns to the chat app. The overlay's root is a
+                // plain FrameLayout, so its event className is NOT one of our
+                // activities: only com.jev.probe.* class names (settings,
+                // main) mean the user really opened our screens. NOTE: the
+                // class namespace (com.jev.probe) can differ from the runtime
+                // applicationId, so this check must NOT use packageName.
+                if (fg == packageName &&
+                    event.className?.toString()?.startsWith(CODE_NAMESPACE + ".") != true
+                ) {
+                    return // our own overlay window mid-focus-handover — ignore
+                }
                 foregroundPkg = fg
+                if (fg != activePkg) currentSnapshot = null // stale chat from another app
                 val drop = fg == packageName ||
                     fg.contains("launcher", ignoreCase = true) ||
                     fg == "com.miui.home" ||
                     fg == "com.android.systemui"
-                main.post { if (drop) overlay?.hide() else overlay?.showIdle(null, captureButton = true) }
+                // One manual path per app: capture-blocked apps get 粘贴分析
+                // (their screenshots are always black), everything else gets
+                // 截屏分析.
+                val blocked = fg == PKG_SCREENSHOT_BLOCKED
+                main.post {
+                    if (drop) overlay?.hide()
+                    else overlay?.showIdle(null, captureButton = !blocked, clipboard = blocked)
+                }
                 return
             }
         }
@@ -197,24 +207,13 @@ open class ChatCaptureService : AccessibilityService() {
     private fun maybeCapture() {
         val root = rootInActiveWindow ?: return
         val pkg = root.packageName?.toString()
-        // Manual-only app: bubble only — no tree read, no auto screenshot, no
-        // auto OCR, no fill. Content-changed / scrolled events there just
-        // re-park the idle bubble; they must never reach an adapter or the OCR
-        // path.
-        if (pkg == PKG_MANUAL_ONLY) {
-            currentSnapshot = null
-            if (overlay?.isShowing() != true) {
-                main.post { overlay?.showIdle(null, captureButton = true, clipboard = true) }
-            }
-            return
-        }
-        // Apps with no adapter are never handled automatically (v1.3 revision):
-        // the only way in for them is the manual screenshot button — the panel's
-        // "截屏识别" or the bubble menu's "截屏识别一次". Park the capture-button
-        // bubble so it stays reachable (also covers the service-reconnect case:
-        // without this, reopening an unadapted app after MIUI killed us left no
-        // bubble at all). Same exclusions as the window-state branch: our own
-        // settings screens, the launcher, and the system UI get no bubble.
+        // Apps with no adapter are never handled automatically: the only way in
+        // for them is the manual panel button — "截屏分析", or "粘贴分析" for
+        // capture-blocked apps. Park the button bubble so it stays reachable
+        // (also covers the service-reconnect case: without this, reopening an
+        // unadapted app after MIUI killed us left no bubble at all). Same
+        // exclusions as the window-state branch: our own settings screens, the
+        // launcher, and the system UI get no bubble.
         val adapter = adapters[pkg] ?: run {
             if (pkg != activePkg) currentSnapshot = null // stale chat from another app
             val drop = pkg == packageName ||
@@ -222,7 +221,8 @@ open class ChatCaptureService : AccessibilityService() {
                 pkg == "com.miui.home" ||
                 pkg == "com.android.systemui"
             if (overlay?.isShowing() != true && !drop) {
-                main.post { overlay?.showIdle(null, captureButton = true) }
+                val blocked = pkg == PKG_SCREENSHOT_BLOCKED
+                main.post { overlay?.showIdle(null, captureButton = !blocked, clipboard = blocked) }
             }
             return
         }
@@ -351,13 +351,16 @@ open class ChatCaptureService : AccessibilityService() {
                 }
                 main.post {
                     analyzing = false
-                    // Manual-only app: never touch its input box or tree (anti-screenshot
-                    // risk control) — replies are copied, the user pastes.
-                    // Other apps fill directly (still never sends).
-                    val fill: (String) -> Unit = if (pkg == PKG_MANUAL_ONLY) { text ->
+                    // Universal rule: adapted apps get direct input-box fill
+                    // (still never sends); EVERY unadapted app gets
+                    // copy-to-clipboard — we never touch an unknown app's
+                    // input box or node tree, the user pastes instead.
+                    val fill: (String) -> Unit = if (pkg in adapters) { text ->
+                        fillInput(text)
+                    } else { text ->
                         copyToClipboard(text)
                         main.post { overlay?.toast("已复制，长按输入框粘贴") }
-                    } else { text -> fillInput(text) }
+                    }
                     overlay?.showReplies(ranked, replyError, fill)
                 }
             }
@@ -367,22 +370,17 @@ open class ChatCaptureService : AccessibilityService() {
     // ------------------------------------------------------------------ OCR
 
     /**
-     * Bubble menu → "截屏识别一次". Works on ANY app, adapted or not: one whole
-     * screen shot, every line OCR'd, lines grouped into pseudo-bubbles by line
-     * spacing. Nobody can tell who said what this way, so everything is filed as
-     * the other person and the panel says so.
+     * Manual "截屏分析" — works on ANY app, adapted or not: one whole screen
+     * shot, OCR with side detection, lines grouped into pseudo-bubbles.
+     * Universal rule: the node tree is only ever walked for adapted apps;
+     * everywhere else the OCR's first line serves as the conversation title.
      */
     private fun ocrCaptureManual() {
         val root = rootInActiveWindow
         val pkg = root?.packageName?.toString() ?: foregroundPkg ?: activePkg ?: ""
-        // Manual-only app: manual screenshot + OCR IS allowed (bubble-only mode
-        // covers the automatic paths), but we still never walk the node tree for
-        // a title — whole-screen OCR falls back to its first line as the title.
-        if (pkg == PKG_MANUAL_ONLY) { ocrCapture(null, emptyList(), pkg, manual = true); return }
-        // Top bar text, if this app has one we can read; else the first OCR line.
-        val title = root?.let {
+        val title = if (pkg in adapters) root?.let {
             findTitleInActionBar(it, Int.MAX_VALUE, resources.displayMetrics.widthPixels, resources, 0.15, 0.85)
-        }
+        } else null
         ocrCapture(title, emptyList(), pkg, manual = true)
     }
 
@@ -472,8 +470,10 @@ open class ChatCaptureService : AccessibilityService() {
     private fun ocrWholeScreen(bmp: Bitmap, treeTitle: String?, pkg: String, manual: Boolean) {
         val region = Rect(0, (bmp.height * TOP_CROP).toInt(), bmp.width, (bmp.height * BOTTOM_CROP).toInt())
         ocr.recognize(bmp, region) { lines ->
+            // Side detection samples pixels from the shot, so group BEFORE
+            // recycling the bitmap.
+            val msgs = groupOcrLines(lines, bmp)
             runCatching { bmp.recycle() }
-            val msgs = groupOcrLines(lines)
             val title = treeTitle?.takeIf { it.isNotBlank() }
                 ?: lines.firstOrNull()?.text?.trim()?.take(24)
             finishOcrSnapshot(ChatSnapshot(title, msgs, note = OCR_NOTE), pkg, manual)
@@ -482,31 +482,134 @@ open class ChatCaptureService : AccessibilityService() {
 
     /**
      * OCR lines → "bubbles": a gap larger than 1.2x the previous line's height
-     * starts a new one. Side is unknowable from a flat screen read, so every
-     * group is filed as the other person (and [OCR_NOTE] says so on the panel).
+     * starts a new one. Each group's sender side is then guessed in three steps
+     * (see [decideSide]); a group that stays undecided is filed as the other
+     * person — a wrong "other" is only coarse, a wrong "me" flips the stance.
      */
-    private fun groupOcrLines(lines: List<OcrLine>): List<Msg> {
+    private fun groupOcrLines(lines: List<OcrLine>, bmp: Bitmap): List<Msg> {
         val usable = lines
             .filter { it.text.isNotBlank() && !PURE_TIME.matches(it.text.trim()) }
+            .filter { !isSystemLine(it, bmp) }
             .sortedBy { it.bounds.top }
-        val out = ArrayList<Msg>()
-        val buf = StringBuilder()
+        val groups = ArrayList<MutableList<OcrLine>>()
         var prev: OcrLine? = null
         for (l in usable) {
             val p = prev
             if (p != null) {
                 val gap = l.bounds.top - p.bounds.bottom
-                val lineHeight = maxOf(p.bounds.height(), 1)
-                if (gap > lineHeight * 1.2f) {
-                    if (buf.isNotEmpty()) { out.add(Msg("other", buf.toString())); buf.setLength(0) }
-                }
+                if (gap > maxOf(p.bounds.height(), 1) * 1.2f) groups.add(mutableListOf())
             }
-            if (buf.isNotEmpty()) buf.append(' ')
-            buf.append(l.text.trim())
+            if (groups.isEmpty()) groups.add(mutableListOf())
+            groups.last().add(l)
             prev = l
         }
-        if (buf.isNotEmpty()) out.add(Msg("other", buf.toString()))
+        val out = ArrayList<Msg>()
+        for (g in groups) {
+            val union = Rect(g.first().bounds)
+            for (l in g) union.union(l.bounds)
+            val text = g.joinToString(" ") { it.text.trim() }
+            if (text.isNotBlank()) out.add(Msg(decideSide(union, bmp), text))
+        }
         return out
+    }
+
+    /** Width of the captured area in SCREEN units (line boxes are screen coords). */
+    private fun capturedWidth(bmpWidth: Int): Float {
+        val sx = if (ocr.scaleX > 0f) ocr.scaleX else 1f
+        return bmpWidth / sx
+    }
+
+    /**
+     * Sender side of one grouped bubble, in three tiers:
+     *
+     *  1. Position — chat apps right-align the user's own bubbles, so a group
+     *     centered right of 55% of the width is mine, left of 45% theirs. This
+     *     settles every short message.
+     *  2. A LONG bubble spans nearly the full width, so its center always lands
+     *     near 50% where position says nothing. There the avatar column decides:
+     *     a row's avatar sits OUTSIDE the bubble on the sender's side, so the
+     *     margin strip beside the group that holds a colorful block names the
+     *     sender.
+     *  3. Last resort, bubble fill: my bubble is usually colored, theirs grey —
+     *     sample just outside the text box where the bubble's padding is.
+     */
+    private fun decideSide(union: Rect, bmp: Bitmap): String {
+        val ox = ocr.originX
+        val w = capturedWidth(bmp.width)
+        val c = (union.centerX() - ox) / w
+        if (c < 0.45f) return "other"
+        if (c > 0.55f) return "me"
+        // Middle zone: avatar column first (most reliable), then bubble fill.
+        val y1 = union.top - 6
+        val y2 = union.bottom + 6
+        val leftStrip = Rect(ox, y1, (union.left - 12).coerceAtLeast(ox + 1), y2)
+        val rightStrip = Rect(union.right + 12, y1, (ox + w).toInt(), y2)
+        val leftAv = colorfulPercent(bmp, leftStrip)
+        val rightAv = colorfulPercent(bmp, rightStrip)
+        if (rightAv > 15 && rightAv > leftAv + 10) return "me"
+        if (leftAv > 15 && leftAv > rightAv + 10) return "other"
+        val edgeSat = maxOf(
+            avgSaturation(bmp, Rect((union.left - 14).coerceAtLeast(ox), union.top, (union.left - 2).coerceAtLeast(ox + 1), union.bottom)),
+            avgSaturation(bmp, Rect(union.right + 2, union.top, (union.right + 14).coerceAtMost((ox + w).toInt()), union.bottom)))
+        if (edgeSat > 35) return "me"
+        return "other"
+    }
+
+    /** Centered timestamp / recall notices etc. — UI chrome, not a message. */
+    private fun isSystemLine(l: OcrLine, bmp: Bitmap): Boolean {
+        val t = l.text.trim()
+        if (t.length > 24) return false
+        if (t.contains("撤回")) return true
+        val c = (l.bounds.centerX() - ocr.originX) / capturedWidth(bmp.width)
+        return c in 0.42f..0.58f && SYSTEM_LINE.containsMatchIn(t)
+    }
+
+    private val SYSTEM_LINE = Regex(
+        "((\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日)|(\\d{1,2}\\s*:\\s*\\d{2})|(昨天|今天|前天|刚刚|周[一二三四五六日天]|星期[一二三四五六日天]))|撤回")
+
+    /** Percent of colorful (saturated, not near-black) pixels in a screen-space
+     *  rect. An avatar is a block of saturated pixels; flat backgrounds and
+     *  monochrome bubbles are not — this is what makes the avatar column pop. */
+    private fun colorfulPercent(bmp: Bitmap, box: Rect): Int {
+        var hit = 0; var n = 0
+        forEachSampledPixel(bmp, box) { r, g, b ->
+            val mx = maxOf(r, g, b)
+            n++
+            if (mx - minOf(r, g, b) > 40 && mx > 60) hit++
+        }
+        return if (n == 0) 0 else hit * 100 / n
+    }
+
+    /** Mean colorfulness (max-min channel, 0-255) of a screen-space rect —
+     *  reads the bubble's padding just outside the text box. */
+    private fun avgSaturation(bmp: Bitmap, box: Rect): Int {
+        var sum = 0; var n = 0
+        forEachSampledPixel(bmp, box) { r, g, b ->
+            sum += maxOf(r, g, b) - minOf(r, g, b); n++
+        }
+        return if (n == 0) 0 else sum / n
+    }
+
+    /** Sample a screen-space rect in the bitmap (screen -> bitmap via the
+     *  capture's scale/origin), stepping 3px to keep main-thread reads cheap. */
+    private inline fun forEachSampledPixel(
+        bmp: Bitmap, box: Rect, step: Int = 3, body: (Int, Int, Int) -> Unit) {
+        val sx = if (ocr.scaleX > 0f) ocr.scaleX else 1f
+        val sy = if (ocr.scaleY > 0f) ocr.scaleY else 1f
+        val bx1 = ((box.left - ocr.originX) * sx).toInt().coerceIn(0, bmp.width - 1)
+        val by1 = ((box.top - ocr.originY) * sy).toInt().coerceIn(0, bmp.height - 1)
+        val bx2 = ((box.right - ocr.originX) * sx).toInt().coerceIn(bx1 + 1, bmp.width)
+        val by2 = ((box.bottom - ocr.originY) * sy).toInt().coerceIn(by1 + 1, bmp.height)
+        var y = by1
+        while (y < by2) {
+            var x = bx1
+            while (x < bx2) {
+                val p = bmp.getPixel(x, y)
+                body((p shr 16) and 0xFF, (p shr 8) and 0xFF, p and 0xFF)
+                x += step
+            }
+            y += step
+        }
     }
 
     /** Strip the read receipt and the timestamp Feishu glues onto a bubble. */
@@ -587,11 +690,15 @@ open class ChatCaptureService : AccessibilityService() {
      *  manual taps always re-run but still refresh this. */
     private var lastClipSig: String = ""
 
-    /** Auto path: manual-only app foreground + a readable fresh text clip → analyze. */
+    /** Auto path: a capture-blocked app is in the foreground and a fresh,
+     *  readable text clip arrives → analyze it. Gated to capture-blocked apps
+     *  only — elsewhere the screenshot path works, and auto-reading every
+     *  clipboard copy in every app would send unrelated copied text to the
+     *  API. */
     private fun maybeAnalyzeClipboardAuto() {
         if (!prefs.enabled) return
         val fg = rootInActiveWindow?.packageName?.toString() ?: return
-        if (fg != PKG_MANUAL_ONLY) return
+        if (fg != PKG_SCREENSHOT_BLOCKED) return
         val text = readClipboardText() ?: return
         if (text.isEmpty() || text == lastClipSig) return
         lastClipSig = text
@@ -616,20 +723,35 @@ open class ChatCaptureService : AccessibilityService() {
     }
 
     /**
-     * Manual-only app's panel / bubble menu → 粘贴分析. The tap itself hands this app
+     * Panel / bubble menu → 粘贴分析 (unadapted apps). The tap itself hands this app
      * input focus ([OverlayController.withFocus]); the read must happen inside
      * that focus window, so the foreground package is captured BEFORE the
      * window becomes focusable (rootInActiveWindow would otherwise point at
      * our own overlay mid-window).
+     *
+     * A null read means the system does not consider us focused *yet* — WMS
+     * focus handover lags the flag change, so return false and let withFocus
+     * retry inside the same focus window. Empty (or our own reply clip) and
+     * success are final either way.
      */
     private fun clipboardAnalyzeManual() {
         val fg = rootInActiveWindow?.packageName?.toString() ?: foregroundPkg ?: ""
-        overlay?.withFocus {
+        overlay?.withFocus(
+            onGiveUp = {
+                overlay?.showError(
+                    "读不到剪贴板：先长按对方消息 → 复制，再点一次。" +
+                    "仍不行就去 系统设置 → 应用管理 → Jev助手 → 权限，允许读取剪贴板"
+                )
+            },
+        ) {
             val text = readClipboardText()
             when {
-                text == null -> overlay?.showError("读不到粘贴：长按对方消息 → 复制，再点一次")
-                text.isEmpty() -> overlay?.showError("粘贴没有可分析的文本")
-                else -> analyzeClipboardText(text, fg, manual = true)
+                text == null -> false
+                text.isEmpty() -> {
+                    overlay?.showError("剪贴板里没有可分析的文本（刚复制过回复也会算空）。长按对方消息 → 复制，再点一次")
+                    true
+                }
+                else -> { analyzeClipboardText(text, fg, manual = true); true }
             }
         }
     }
@@ -637,23 +759,39 @@ open class ChatCaptureService : AccessibilityService() {
     /**
      * One copied message → single-message snapshot → the same analysis the
      * adapted apps get. The tree is NEVER read (manual-only rule): the title
-     * stays null, so a non-empty whitelist blocks this path the same way it
-     * blocks manual OCR.
+     * stays null, so a non-empty whitelist can never pass — the manual tap
+     * gets an explanatory error, the auto path just stays quiet (and the
+     * overlay is never hidden).
      */
     private fun analyzeClipboardText(text: String, fgPkg: String, manual: Boolean = false) {
-        if (!prefs.hasKey()) { overlay?.showError("未设置判断接口密钥，去设置里填"); return }
+        if (!prefs.hasKey()) { main.post { overlay?.showError("未设置判断接口密钥，去设置里填") }; return }
         if (manual) lastClipSig = text
         val snapshot = ChatSnapshot(null, listOf(Msg("other", text)), note = CLIP_NOTE)
-        if (!prefs.isAllowed(snapshot.title)) { overlay?.hide(); return }
+        if (!prefs.isAllowed(snapshot.title)) {
+            // The clipboard path never has a chat title, so a non-empty
+            // whitelist can never pass it. hide() here silently removed the
+            // WHOLE overlay — the user saw the panel vanish right after
+            // tapping 粘贴分析. Manual: say what to do. Auto: stay quiet,
+            // but never hide — the bubble must survive.
+            if (manual) main.post {
+                overlay?.showError("设置里开了会话白名单，粘贴分析拿不到会话名。要用粘贴分析，先去设置清空白名单")
+            }
+            return
+        }
         if (fgPkg.isNotEmpty() && fgPkg != activePkg) { activePkg = fgPkg; lastSignature = "" }
         currentSnapshot = snapshot
-        overlay?.resetForNewConversation()
-        overlay?.setSourceText(text)
         lastSignature = snapshot.signature()
-        logOcr("粘贴分析", fgPkg.ifEmpty { PKG_MANUAL_ONLY }, manual = true, "len=${text.length}")
+        logOcr("粘贴分析", fgPkg.ifEmpty { "unknown" }, manual = true, "len=${text.length}")
         pendingSnapshot = snapshot
         main.removeCallbacks(debounce)
-        runAnalysis()
+        // The auto path calls in from a worker thread; overlay view work must
+        // stay on main. (The manual path is already there — posting is still
+        // correct.)
+        main.post {
+            overlay?.resetForNewConversation()
+            overlay?.setSourceText(text)
+            runAnalysis()
+        }
     }
 
     /** Fill the chat input box with the chosen reply (never sends). */
@@ -760,18 +898,28 @@ open class ChatCaptureService : AccessibilityService() {
     companion object {
         private const val TAG = "JEVASSIST"
 
-        /** The manual-only app's package. Automatic reading (node tree / auto
-         *  screenshot / auto OCR) risks tripping its anti-screenshot risk
-         *  control, so it stays off; only the parked bubble and a MANUAL
-         *  "截屏识别一次" work. */
-        private const val PKG_MANUAL_ONLY = "com.tencent.mm"
+        /** The CODE namespace (build.gradle's namespace), which can differ
+         *  from the runtime applicationId. Activity class names are always
+         *  namespace-qualified, so window-event class-name checks must use
+         *  this — never packageName. */
+        private const val CODE_NAMESPACE = "com.jev.probe"
+
+        /** A capture-blocked app's package. Every app runs the GENERIC
+         *  unadapted flow (parked bubble, manual "截屏分析" / "粘贴分析",
+         *  copy replies). The ONLY extra thing this package gets is the
+         *  auto-clipboard listener: the system refuses to capture its windows
+         *  at all (screenshot OCR comes back black, code 6), so the clipboard
+         *  is the only working text channel. Functional distinction, not an
+         *  app whitelist: any other app the system blocks capture for would
+         *  be added here the same way. */
+        private const val PKG_SCREENSHOT_BLOCKED = "com.tencent.mm"
 
         /** Whole-screen OCR keeps the middle: no action bar, no input area. */
         private const val TOP_CROP = 0.12f
         private const val BOTTOM_CROP = 0.84f
 
         /** Said on the panel whenever a snapshot came from flat-screen OCR. */
-        private const val OCR_NOTE = "OCR 未分边，把全部消息当作对方所说"
+        private const val OCR_NOTE = "OCR 按左右位置分边，个别消息可能分错"
 
         /** Clips written by this app (reply copy / fill fallback) — never
          *  analyzed back. */

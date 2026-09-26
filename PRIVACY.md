@@ -14,7 +14,8 @@
 - 作者不运营任何后端服务器，代码里也没有向作者或任何固定第三方回传数据的逻辑；你的聊天内容作者看不到，也拿不到。
 - 截图本身从不上传，识别文字（OCR）全部在手机本地完成。
 - 密钥、设置、知识库、聊天历史都只存在手机本地的 App 私有目录，其它 App 读不到；卸载即清空。
-- 无广告、无第三方统计 SDK、不用 Cookie 或广告标识符、不读通讯录、不读位置、不读其它 App 列表。
+- 无广告，不使用 Cookie，不读通讯录、不读位置、不读其它 App 列表。
+- 自 v1.0.1 起集成了 **Google Analytics（Firebase Analytics）**做匿名使用统计（启动次数、页面访问、崩溃率等），**不采集任何聊天内容**，详见第 2 节末尾的说明。
 
 ## 2. 会离开你设备的数据
 
@@ -62,7 +63,7 @@ API 密钥会作为请求头（`Authorization`）随对应请求发给你自己�
 | 无障碍服务 | 读取当前聊天窗口的文字，把选中的回复填进输入框 | 不点发送键，不操作转账/红包/收款，不读取其它应用的数据库 |
 | 截屏能力（无障碍服务附带） | 控件树读不到正文时（例如飞书），截取当前窗口做本地 OCR | 截图只在内存中处理，识别完即释放，不保存、不上传 |
 | 悬浮窗 | 在聊天上方显示分析面板 | 不采集其它应用界面 |
-| 网络 | 访问你自己配置的模型接口 | 不连接作者的任何服务器，无遥测、无埋点上报 |
+| 网络 | 访问你自己配置的模型接口；Google Analytics 的匿名统计数据上报 | 模型接口不连作者的任何服务器；统计上报不含聊天内容 |
 | 前台服务 + 通知 | 保持服务不被系统冻结、清理 | 不推送营销通知 |
 
 ## 5. 我们不做什么
@@ -115,4 +116,4 @@ Jev Chat Assistant (Android) reads the chat you are currently viewing on your de
 - The project is open source; every claim above can be verified against the source at https://github.com/jev-chat/jev-chat-jarvis.
 - Third-party model providers you choose to use are governed by their own privacy policies, which you should review separately.
 
-Version 1.0, effective 2026-09-23. Scope: Android app only.
+Version 1.1, effective 2026-09-26. Scope: Android app only.

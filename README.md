@@ -1,12 +1,39 @@
-# jev-chat-jarvis（fork）
+# Jev 聊天助手
 
-本项目是 [jev-chat/jev-chat-jarvis](https://github.com/jev-chat/jev-chat-jarvis) 的 fork。
+主仓库：[ismoshushi/jev-chat-jarvis](https://github.com/ismoshushi/jev-chat-jarvis)。
 
-- 原项目的一切版权归 **原项目及其贡献者** 所有，本项目沿用其 [MIT License](LICENSE)。
-- 本 fork 仅用于个人功能扩展，不代表原项目立场；项目介绍、安装与使用说明请访问原项目仓库。
+本项目基于 [jev-chat/jev-chat-jarvis](https://github.com/jev-chat/jev-chat-jarvis)（MIT License）扩展，一切代码遵循同样的 [MIT License](LICENSE)，归原项目及其贡献者所有的部分版权归原项目所有。
 
 ## 与原项目的差异
 
-- 在手动兜底的聊天 App 中新增「粘贴分析」：复制对方消息后一键分析，返回判断与候选回复。
+- **通用聊天方案**：未自动适配的聊天 App 不再逐个适配——气泡面板一键入口：「截屏分析」（手动截图 → 本地 OCR 按左右位置分边 → 自动分析）；个别系统禁截屏的 App 自动改用「粘贴分析」（复制对方消息一键分析）。候选回复复制到剪贴板粘贴使用。QQ、X、飞书保持自动读取与一键填入。
+- **匿名使用统计**：自 v1.0.1 起集成 Google Analytics（Firebase Analytics），只统计启动、页面访问、崩溃等匿名数据，不采集任何聊天内容，详见 [隐私政策](PRIVACY.md)。
+
+## 效果演示
+
+| 截屏分析（未适配 App，Soul） | 粘贴分析（防截屏 App，微信群） |
+| --- | --- |
+| ![Soul 截屏分析](docs/images/demo-soul.png) | ![微信群粘贴分析](docs/images/demo-wechat-group.jpg) |
+
+## 测试与免责声明
+
+**欢迎测试，一起完善。** 本项目的所有功能均由用户主动触发（点按钮、复制、粘贴等已知常规操作），不使用任何非常规手段。欢迎大家加入测试、提 Issue 或 PR。
+
+---
+
+## ⚠️ 使用前必读 · 免责声明 ⚠️
+
+<font color="red" size="5"><b>温馨提示：使用本工具可能会引起「微信不能截屏」的问题，请大家悉知！</b></font>
+
+> [!WARNING]
+> **使用本工具可能会导致微信无法截屏**，此为已知问题，请使用前务必知悉并自行评估。
+
+**请在使用之前完整阅读以下声明：**
+
+- 本项目仅供学习与技术研究，请务必通过**合法途径**使用；
+- 使用前请自行了解并遵守相关平台的服务条款及当地法律法规；
+- 使用本工具**可能会引起微信不能截屏**等问题，请悉知；
+- **除上述已明确提示的问题外，其他一切问题概不负责**；
+- **一旦下载、安装或使用本项目，即视为已阅读、理解并同意本声明的全部内容**；如不同意，请立即停止使用并卸载。
 
 其余细节见 [CHANGELOG](CHANGELOG.md)。
