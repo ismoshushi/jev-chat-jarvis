@@ -55,12 +55,19 @@ class OverlayController(private val ctx: Context) {
     /** Bubble menu → one manual screenshot + OCR of whatever app is open. */
     var onOcrCapture: (() -> Unit)? = null
 
+    /** Bubble panel / menu → read the clipboard and analyze the copied text
+     *  (the manual-only app's path). Runs inside the [withFocus] focus window. */
+    var onClipboardAnalyze: (() -> Unit)? = null
+
     /** How much knowledge context the last analysis actually used. */
     private var ctxNotes = 0
     private var ctxHistory = 0
 
     /** A caveat about how the current snapshot was captured (OCR mode). */
     private var noteText: String? = null
+
+    /** The exact copied text a clipboard-based analysis was built from. */
+    private var sourceText: String? = null
 
     /** Whether the overlay window is currently on screen. */
     fun isShowing(): Boolean = root != null
@@ -175,7 +182,7 @@ class OverlayController(private val ctx: Context) {
         val scroll = ScrollView(ctx).apply {
             isVerticalScrollBarEnabled = false
             // Cap the height so the panel stays in the upper area and does not
-            // cover the WeChat input box / keyboard. Scroll inside if taller.
+            // cover the chat input box / keyboard. Scroll inside if taller.
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, (screenH * 0.40f).roundToInt()).apply { topMargin = dp(6) }
         }
@@ -240,6 +247,7 @@ class OverlayController(private val ctx: Context) {
             setPadding(dp(4), dp(4), dp(4), dp(4))
             layoutParams = FrameLayout.LayoutParams(dp(196), ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(56) }
         }
+        menu.addView(menuItem("粘贴分析") { root?.removeView(menu); onClipboardAnalyze?.invoke() })
         menu.addView(menuItem("截屏识别一次") { root?.removeView(menu); onOcrCapture?.invoke() })
         menu.addView(menuItem("把当前会话存为联系人") { onSaveContact?.invoke(); root?.removeView(menu) })
         menu.addView(menuItem("打开设置") { openSettings(); root?.removeView(menu) })
@@ -283,10 +291,57 @@ class OverlayController(private val ctx: Context) {
         root?.let { runCatching { wm.updateViewLayout(it, params) } }
     }
 
+    /**
+     * Briefly hand this app input focus so a clipboard read is allowed.
+     *
+     * Android 10+ only lets the focused app (or the default IME) read the
+     * clipboard — an accessibility service is NOT exempt (AOSP
+     * ClipboardService has no accessibility branch). The overlay window is
+     * normally FLAG_NOT_FOCUSABLE; dropping that flag for ~150 ms makes WMS
+     * move input focus to this overlay-layer window, and inside that window
+     * ClipboardManager.primaryClip succeeds. The flag is restored right after
+     * (the chat app regains focus; the IME may close once). [work] runs on the
+     * main thread.
+     */
+    fun withFocus(work: () -> Unit) {
+        val r = root
+        val params = lp
+        if (r == null || params == null) { work(); return }
+        try {
+            params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+            wm.updateViewLayout(r, params)
+        } catch (e: Exception) { work(); return }
+        r.postDelayed({
+            try { work() } finally {
+                params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                runCatching { wm.updateViewLayout(r, params) }
+            }
+        }, 150)
+    }
+
     // ------------------------------------------------------------ public API
 
-    fun showIdle(title: String?) {
+    fun showIdle(title: String?, captureButton: Boolean = false, clipboard: Boolean = false) {
         ensureRoot(); bubble?.alpha = 0.55f
+        // clipboard mode (manual-only app): the primary action is the clipboard read —
+        // the user long-presses a message in the chat, copies it, then taps this.
+        if (clipboard) {
+            setContent(listOf(
+                bigButton("粘贴分析") { onClipboardAnalyze?.invoke() },
+                hint("长按对方消息 → 复制，再点上面按钮")))
+            return
+        }
+        // captureButton mode (manual-only apps): the panel's primary action is
+        // always the screenshot button — automatic capture is off there, so
+        // "分析当前对话" would be a dead button. Always re-set the content so a
+        // stale panel from another app cannot survive the app switch.
+        if (captureButton) {
+            setContent(listOf(
+                bigButton("截屏识别") { onOcrCapture?.invoke() },
+                hint("点上方按钮手动截屏识别当前聊天")
+            ))
+            return
+        }
         // Either there is genuinely nothing to show yet, or the panel is empty
         // for some other reason (root got rebuilt after hide(), leaving
         // contentBox with zero children while lastJudgment still points at a
@@ -309,6 +364,7 @@ class OverlayController(private val ctx: Context) {
         lastJudgment = null
         lastFill = null
         noteText = null
+        sourceText = null
         replyError = null
         contentBox?.removeAllViews()
     }
@@ -341,6 +397,12 @@ class OverlayController(private val ctx: Context) {
         noteText = note
     }
 
+    /** Small-print source line: the copied message a clipboard analysis is
+     *  based on, so the user sees what the answer was grounded in. Null clears. */
+    fun setSourceText(text: String?) {
+        sourceText = text
+    }
+
     /**
      * Take the overlay out of the picture for one screenshot. INVISIBLE, not
      * removed: the window (and everything on it) must survive the round trip.
@@ -357,8 +419,7 @@ class OverlayController(private val ctx: Context) {
     }
 
     /**
-     * A neutral one-time notice (used when the foreground is WeChat, which is
-     * fully disabled). Not framed as an error: shows the bubble, drops any stale
+     * A neutral one-time notice. Not framed as an error: shows the bubble, drops any stale
      * judgment from the previous chat, puts the message in the panel and opens it
      * once so the user actually reads it. Never auto-dismisses (unlike a toast)
      * and never takes input focus (the overlay window is FLAG_NOT_FOCUSABLE).
@@ -412,6 +473,13 @@ class OverlayController(private val ctx: Context) {
 
         // How this snapshot was captured, when it changes how to read it.
         noteText?.let { if (it.isNotBlank()) views.add(hint(it)) }
+
+        // Clipboard path: show the copied message in small print so the user
+        // knows exactly what the judgment and replies were based on.
+        sourceText?.let {
+            if (it.isNotBlank()) views.add(hint(
+                "依据：" + if (it.length > 80) it.take(80) + "…" else it))
+        }
 
         // Danger badge — the alarm signal, up top and color-coded.
         a.dangerLevel?.let {

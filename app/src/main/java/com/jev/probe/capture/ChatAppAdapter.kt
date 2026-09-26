@@ -21,7 +21,7 @@ import com.jev.probe.core.Msg
  * - messages non-empty→ normal capture.
  *
  * The disguised accessibility service (registered as SelectToSpeakService) lets
- * us read the node tree of apps that obfuscate it for normal services (WeChat).
+ * us read the node tree of apps that obfuscate it for normal services.
  * Feishu/Lark does not obfuscate, so its adapter reads plain resource-ids.
  */
 interface ChatAppAdapter {
@@ -39,8 +39,9 @@ private fun looksLikeTimestamp(t: String): Boolean =
  * Conversation title in the top action bar: the topmost short, roughly centered
  * text above the first message bubble. Constrained so we never grab an in-chat
  * timestamp. Used by QQ as a fallback when its title id is absent, by X, and by
- * the bubble menu's manual OCR capture. WeChat has its own [findWeChatTitle]
- * (group titles need extra filtering this generic version does not do).
+ * the bubble menu's manual OCR capture. The manual-only app has its own
+ * [findChatTitle] (group titles need extra filtering this generic version does
+ * not do).
  */
 internal fun findTitleInActionBar(
     root: AccessibilityNodeInfo,
@@ -75,13 +76,14 @@ internal fun findTitleInActionBar(
 
 /** Chinese sentence punctuation — a real message/announcement line has it, a
  *  title never does. */
-private val WECHAT_TITLE_EXCLUDE_PUNCT = Regex("""[，。？！、]""")
+private val TITLE_EXCLUDE_PUNCT = Regex("""[，。？！、]""")
 
-/** A WeChat group title's "(N)" member-count suffix, half- or full-width. */
-private val WECHAT_GROUP_COUNT_SUFFIX = Regex("""[（(]\d+[）)]""")
+/** A group title's "(N)" member-count suffix, half- or full-width. */
+private val GROUP_COUNT_SUFFIX = Regex("""[（(]\d+[）)]""")
 
 /**
- * WeChat conversation title (v1.3 fix): a group's pinned announcement or a
+ * Conversation title for the manual-only app (v1.3 fix): a group's pinned
+ * announcement or a
  * stray message can sit in the same "topmost, short, centered" search
  * [findTitleInActionBar] does and get mistaken for the title (seen picking up
  * `我有企微，但是用不习惯`, a chat line). A candidate must not read like a
@@ -90,7 +92,7 @@ private val WECHAT_GROUP_COUNT_SUFFIX = Regex("""[（(]\d+[）)]""")
  * Nothing qualifying → null (the caller's `lastGoodTitle` then carries the
  * previous stable title forward instead of guessing).
  */
-internal fun findWeChatTitle(
+internal fun findChatTitle(
     root: AccessibilityNodeInfo,
     firstBubbleTop: Int,
     width: Int,
@@ -111,13 +113,13 @@ internal fun findWeChatTitle(
         val node = stack.removeLast()
         val text = node.text?.toString()
         if (!text.isNullOrBlank() && text.length <= 24 && !looksLikeTimestamp(text) &&
-            !WECHAT_TITLE_EXCLUDE_PUNCT.containsMatchIn(text)
+            !TITLE_EXCLUDE_PUNCT.containsMatchIn(text)
         ) {
             val b = Rect(); node.getBoundsInScreen(b)
             if (b.bottom in 1 until actionBarMax && b.bottom < firstBubbleTop &&
                 b.centerX() in minCenterX..maxCenterX
             ) {
-                if (WECHAT_GROUP_COUNT_SUFFIX.containsMatchIn(text)) {
+                if (GROUP_COUNT_SUFFIX.containsMatchIn(text)) {
                     if (b.top < bestCountedTop) { bestCountedTop = b.top; bestCounted = text }
                 } else if (b.top < bestPlainTop) { bestPlainTop = b.top; bestPlain = text }
             }
@@ -127,16 +129,16 @@ internal fun findWeChatTitle(
     return bestCounted ?: bestPlain
 }
 
-/** WeChat (com.tencent.mm). Message bubbles carry a stable id; sender side is
- *  the bubble's horizontal position (right = me, left = other).
+/** The manual-only app (com.tencent.mm). Message bubbles carry a stable id;
+ *  sender side is the bubble's horizontal position (right = me, left = other).
  *
  *  "In a chat window" = a `id/bkl` bubble container exists (even with its text
  *  stripped by the obfuscation) — nothing else counts, so a list screen's
  *  editable search box can no longer pass for a chat window (v1.3 fix: it was
- *  triggering OCR fallback on the conversation list). WeChat 8.0.52+ hides
- *  node text from ordinary services, so an empty read here (a `bkl` with no
- *  text) is exactly the case OCR fallback exists for. */
-class WeChatAdapter : ChatAppAdapter {
+ *  triggering OCR fallback on the conversation list). Newer builds hide node
+ *  text from ordinary services, so an empty read here (a `bkl` with no text)
+ *  is exactly the case OCR fallback exists for. */
+class ManualOnlyAdapter : ChatAppAdapter {
     override val pkg = "com.tencent.mm"
 
     override fun extract(root: AccessibilityNodeInfo, res: Resources): ChatSnapshot? {
@@ -163,7 +165,7 @@ class WeChatAdapter : ChatAppAdapter {
             }
             for (i in node.childCount - 1 downTo 0) node.getChild(i)?.let { stack.addLast(it) }
         }
-        val title = findWeChatTitle(root, firstBubbleTop, width, res)
+        val title = findChatTitle(root, firstBubbleTop, width, res)
         // In a chat but nothing readable → empty snapshot, the OCR fallback cue.
         if (bubbles.isEmpty()) return if (isChat) ChatSnapshot(title, emptyList()) else null
         bubbles.sortBy { it.first }

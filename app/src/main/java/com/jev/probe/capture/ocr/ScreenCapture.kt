@@ -62,11 +62,15 @@ class ScreenCapture(
 
     private val main = Handler(Looper.getMainLooper())
 
-    /** Take one screenshot. [onResult] runs on the main thread, exactly once. */
-    fun capture(shouldCapture: () -> Boolean = { true }, onResult: (Result) -> Unit) {
+    /** Take one screenshot. [onResult] runs on the main thread, exactly once.
+     *  [manual] = the user tapped the button: skip the throttle check and reset
+     *  the failure backoff, so prior automatic failures cannot lock the user out
+     *  (the backoff exists to stop automatic loops, not intentional taps). */
+    fun capture(manual: Boolean = false, onResult: (Result) -> Unit) {
         val now = SystemClock.elapsedRealtime()
         val need = requiredInterval()
-        if (now - lastAttemptAt < need) {
+        if (manual) failStreak = 0
+        if (!manual && now - lastAttemptAt < need) {
             onResult(Result.Failed(CODE_THROTTLED, "截屏太频繁"))
             return
         }
@@ -84,12 +88,7 @@ class ScreenCapture(
 
         // Hide the bubble, give the compositor a frame to drop it, then shoot.
         runCatching { hideOverlay() }
-        main.postDelayed({
-            // The foreground can change while the overlay settles. Do not shoot
-            // the next app and label its pixels as the original conversation.
-            if (shouldCapture()) shoot(finish, done)
-            else finish(Result.Failed(CODE_CANCELLED, "会话已变化，已取消截屏"))
-        }, HIDE_SETTLE_MS)
+        main.postDelayed({ shoot(finish, done) }, HIDE_SETTLE_MS)
     }
 
     private fun shoot(finish: (Result) -> Unit, done: AtomicBoolean) {
@@ -112,6 +111,22 @@ class ScreenCapture(
             }
             override fun onFailure(errorCode: Int) {
                 main.removeCallbacks(timeout)
+                // Window shot refused ("protected / not visible"): some OEM
+                // builds refuse window-level shots of certain apps while still
+                // allowing a whole-display capture. Retry once via the display
+                // path before giving up; if that is blocked too, the caller
+                // sees the platform error as before.
+                if (errorCode == 6 && windowBounds != null && !done.get()) {
+                    windowBounds = null
+                    Log.w(TAG, "window shot refused (code 6), retrying as display shot")
+                    try {
+                        service.takeScreenshot(Display.DEFAULT_DISPLAY, exec, this)
+                        main.postDelayed(timeout, TIMEOUT_MS)
+                    } catch (e: Throwable) {
+                        finish(Result.Failed(CODE_INTERNAL, "截屏失败：${e.javaClass.simpleName}"))
+                    }
+                    return
+                }
                 finish(Result.Failed(errorCode, humanMessage(errorCode)))
             }
         }
@@ -182,7 +197,6 @@ class ScreenCapture(
         const val CODE_THROTTLED = -1
         /** Our own watchdog: the platform callback never arrived. */
         const val CODE_TIMEOUT = -2
-        const val CODE_CANCELLED = -3
         private const val CODE_INTERNAL = 1
 
         private const val MIN_INTERVAL_MS = 1000L

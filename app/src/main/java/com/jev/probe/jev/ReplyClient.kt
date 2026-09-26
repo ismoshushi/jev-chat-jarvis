@@ -84,23 +84,55 @@ class ReplyClient(private val prefs: Prefs) {
     }
 
     private fun parseThree(content: String): List<String> {
-        val start = content.indexOf('[')
-        val end = content.lastIndexOf(']')
+        val cleaned = content.trim().trim('`').removePrefix("json").trim()
+        val start = cleaned.indexOf('[')
+        val end = cleaned.lastIndexOf(']')
         if (start >= 0 && end > start) {
             try {
-                val arr = JSONArray(content.substring(start, end + 1))
+                val arr = JSONArray(cleaned.substring(start, end + 1))
                 val out = ArrayList<String>()
-                for (i in 0 until arr.length()) out.add(arr.getString(i).trim())
-                if (out.size >= 3) return out.take(3)
-                while (out.size < 3) out.add("（稍等，我看下）")
-                return out
+                for (i in 0 until arr.length()) sanitize(arr.opt(i))?.let { out.add(it) }
+                if (out.isNotEmpty()) {
+                    val res = out.take(3).toMutableList()
+                    while (res.size < 3) res.add("（稍等，我看下）")
+                    return res
+                }
             } catch (_: Exception) { }
         }
-        // Fallback: split lines.
-        val lines = content.split("\n").map { it.trim().trimStart('-', '*', '1', '2', '3', '.', ' ', '"') }
-            .filter { it.isNotBlank() }
+        // Fallback: split lines, keeping only speakable text.
+        val lines = cleaned.split("\n")
+            .map { it.trim().trimStart('-', '*', '1', '2', '3', '.', ' ', '"') }
+            .mapNotNull { sanitize(it) }
         val out = lines.take(3).toMutableList()
         while (out.size < 3) out.add("（稍等，我看下）")
         return out
+    }
+
+    /**
+     * One candidate -> plain chat text, or null when nothing speakable remains.
+     * Some reply models wrap each reply in a JSON object or prefix English
+     * scaffolding ("From text:", "Reply:"); the panel must show pure text only.
+     */
+    private fun sanitize(raw: Any?): String? {
+        var s = when (raw) {
+            null -> return null
+            is org.json.JSONArray -> return null
+            is JSONObject -> {
+                val t = raw.opt("text") ?: raw.opt("content") ?: raw.opt("reply")
+                    ?: raw.opt("message") ?: raw.opt("answer") ?: raw.opt("回复")
+                    ?: return null
+                t.toString()
+            }
+            else -> raw.toString()
+        }
+        s = s.trim().trim('`').trim()
+        // Strip English scaffolding labels some models emit.
+        s = s.replace(Regex("(?i)^(from\\s*text|text|reply|response|output|message|content|answer)\\s*[:：]\\s*"), "")
+        // Strip wrapping quotes (straight + CJK).
+        s = s.trim('"', '\'', '“', '”', '‘', '’', '「', '」').trim()
+        if (s.isEmpty()) return null
+        // Pure JSON / punctuation scaffolding line -> drop.
+        if (s.all { it in "[]{}(),.:：；、|	“”\"'" }) return null
+        return s
     }
 }

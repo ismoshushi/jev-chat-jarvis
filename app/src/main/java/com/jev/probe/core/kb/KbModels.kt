@@ -22,8 +22,8 @@ data class Note(
 
 /**
  * One person (or group) the user chats with. [aliases] is what makes a contact
- * cross-app: the same person shows up as different conversation titles in
- * WeChat / QQ / Feishu, and each of those titles can be listed here.
+ * cross-app: the same person shows up as different conversation titles across
+ * chat apps, and each of those titles can be listed here.
  */
 data class Contact(
     val id: String,

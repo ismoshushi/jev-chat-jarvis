@@ -1,11 +1,11 @@
 # Jev 聊天助手（安卓）— 全平台非侵入对话副驾
 
-挂在任意聊天 App 旁边（微信、飞书已适配）的非侵入式助手：读到对方最新消息 → 调 Jev 判断 → 悬浮窗给出分析和 3 条候选回复（Jev 排序）→ 人一键填入微信输入框。**发送永远由人手动点，程序不自动发。**
+挂在任意聊天 App 旁边的非侵入式助手：读到对方最新消息 → 调 Jev 判断 → 悬浮窗给出分析和 3 条候选回复（Jev 排序）→ 人一键填入聊天输入框。**发送永远由人手动点，程序不自动发。**
 
 ## 硬约束（所有人必须遵守）
 
 1. **不 hook、不 Xposed、不改目标 App、不读其数据库**。只用系统无障碍服务与截屏。
-2. **绝不自动发送消息**，绝不点微信的发送按钮。填入输入框后停手。
+2. **绝不自动发送消息**，绝不点任何聊天 App 的发送按钮。填入输入框后停手。
 3. **不碰钱**：不触碰转账、红包、收款码相关任何界面元素。
 4. **路径全 ASCII**：Android 构建工具在 Windows 上不接受中文路径。项目只能在 `H:\ai_tool\jev-android`。
 5. **密钥不落盘、不进日志、不进 git**：OpenRouter key 从环境变量 `OPENROUTER_API_KEY` 读，或 App 加密设置项。任何文件里都不许出现 `sk-or-` 开头的字符串。
@@ -17,14 +17,14 @@
 - Kotlin，传统 View + XML，**不用 Compose**
 - minSdk 30，compileSdk / targetSdk 35
 - JDK 17（`H:\android\jdk`），Android SDK 在 `H:\android\sdk`，Gradle 缓存 `H:\android\gradle-home`
-- 目标机：小米 14（houji / 23127PN0CC），HyperOS 3.0 / Android 16 (SDK 36)，微信 8.0.78
+- 目标机：小米 14（houji / 23127PN0CC），HyperOS 3.0 / Android 16 (SDK 36)
 - 模型客户端分三路：`jev/JudgeClient`（判断）、`jev/ReplyClient`（回复）、`jev/VisionClient`（视觉，OCR 用），共用 `jev/HttpJson`；配置在 `core/Prefs`（`judge*` / `reply*` / `vision*` 字段），旧密钥一次性迁移，标记位 `prefs_migrated_v13`。
 - ML Kit `com.google.mlkit:text-recognition-chinese:16.0.1`（bundled，不是 play-services 版），`ndk.abiFilters` 只留 `arm64-v8a`。
 
 ## 关键背景（2026-09-21 实测结论，别重复踩）
 
-- 微信 8.0.52 起对普通无障碍服务**混淆/隐藏节点**。本机实测 `uiautomator dump` 对微信任何界面只返回一个空根节点。
-- 社区绕法：把无障碍服务的类名注册成系统内置的 `com.google.android.accessibility.selecttospeak.SelectToSpeakService`。**对 8.0.78 是否仍有效未验证，这就是探针 App 要回答的问题。**
+- 部分聊天 App 会对普通无障碍服务**混淆/隐藏节点**。本机实测 `uiautomator dump` 对这类 App 的界面只返回一个空根节点。
+- 社区绕法：把无障碍服务的类名注册成系统内置的 `com.google.android.accessibility.selecttospeak.SelectToSpeakService`。**是否对所有版本仍有效未验证，这就是探针 App 要回答的问题。**
 - 兜底路线：无障碍服务的 `takeScreenshot()` + 本地 OCR（ML Kit），同样零 token。
 - 飞书 Android（2026-09-21 实测）：消息正文自绘，无障碍树里**没有文字**（伪装服务与 `uiautomator dump` 一致），只有 `bubble_content_container` 气泡位置、`group_name` 标题、`kb_rich_text_content` 输入框；正文要走 takeScreenshot + OCR。飞书默认左对齐布局，我/对方不能按左右判。
 - 手机 QQ 9.3.50（2026-09-21 实测，小米 14 / 1200×2670）：节点**不混淆**，普通 `uiautomator dump` 即可读。消息正文 `com.tencent.mobileqq:id/mjn`（TextView，text 即正文），群昵称 `id/mjq`，标题 `id/371`，输入框 `id/input`，发送按钮 `id/send_btn`（**绝不 performAction**）。时间戳与系统提示条无 id，只采 `id/mjn` 就自然排除。
@@ -32,6 +32,7 @@
 - X / Twitter 12.25.2（2026-09-21 实测，小米 14 / 1200×2670 / 中文界面）：私信页是 **Compose UI，消息节点没有 resource-id**，`android.view.View`、全宽 `[0,y][1200,y+h]`、text 为空，**全部信息在 content-desc**，格式 `发件人：正文。8:11 上午。Read。`（全角冒号分隔、`。` 粘字段、末尾可能有时间和 `Read`）。附件行 `All-In：附加的帖子。。` 内部嵌套引用帖子的 TextView，只采 View 自身的 desc、不采子节点。
 - X **所有页面都是 `com.x.android.main.MainActivity`，不能按 activity 判窗**：对话页有 EditText（唯一那个，[204,2424][1152,2568]），私信列表页没有 → 靠「树里有没有可编辑节点」判断。列表页的行长得也像（全宽 View + desc），但格式是 `All-In, @all_in_2026, 正文…`，用含 `, @` 再排除一次。发送按钮输入后才出现，**绝不点**。
 - 采集层按 App 分发：`capture/ChatAppAdapter.kt` 一个 App 一个适配器，`ChatCaptureService` 按前台包名查表；下游通用。
+- manual-only App（com.tencent.mm）采集路线（2026-09-25 改）：**粘贴板分析**。用户在聊天里长按对方消息 → 复制 → 点气泡面板「粘贴板分析」（菜单也有入口）。关键机制：Android 10+ 只允许持有输入焦点的应用读剪贴板，AOSP `ClipboardService` 对无障碍服务**没有豁免**（源码核实过），`OnPrimaryClipChangedListener` 对不允许的应用也不派发；实现为 `OverlayController.withFocus` 把悬浮窗短暂改可聚焦（去掉 FLAG_NOT_FOCUSABLE，WMS 自动把焦点挪给 overlay 层窗口），150ms 后在焦点窗口内读 `primaryClip` 再恢复不可聚焦。自己写入的剪贴板（label `jev_reply`）被跳过；同一段文本自动路径去重、手动可重跑。该 App 里**仍然不读节点树、不截屏、不填输入框**：候选回复只「复制」让用户自己粘贴。其他已适配 App 维持原逻辑，未适配 App 维持手动「截屏识别」不变。
 - Jev = TypeSafe 的判断模型，只回答选择题/打分/是非，不生成文字。走 OpenRouter：
   `POST https://openrouter.ai/api/alpha/decisions`，model `typesafe/jev-1.13`，
   body `{model, state, questions}`，答案在 `answers`。实测 7 题一次约 900 ms、约 1000 输入 token、0.00004 美元。

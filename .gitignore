@@ -39,3 +39,6 @@ secrets.*
 *.jks
 *.keystore
 keystore.properties
+
+# WorkBuddy local workspace data
+/.workbuddy/
