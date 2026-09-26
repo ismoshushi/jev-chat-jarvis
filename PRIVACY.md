@@ -2,7 +2,7 @@
 
 **Jev 聊天助手在你的设备上读取你正在看的聊天，把内容发给你自己配置的模型接口做判断和起草回复。作者不运营服务器，收不到你的任何数据。**
 
-版本 v1.0，生效日期 2026-09-23。适用范围：Android 端 [jev-chat-jarvis](https://github.com/jev-chat/jev-chat-jarvis)。Windows 版（[jev-chat-windows](https://github.com/jev-chat/jev-chat-windows)）与 macOS 版（[jev-chat-jarvis-mac](https://github.com/jev-chat/jev-chat-jarvis-mac)）是各自独立的仓库和安装包，不在本政策范围内，请分别查看它们自己的说明。
+版本 v1.0.1，生效日期 2026-09-26。适用范围：Android 端 [jev-chat-jarvis](https://github.com/ismoshushi/jev-chat-jarvis)。Windows 版（[jev-chat-windows](https://github.com/ismoshushi/jev-chat-windows)）与 macOS 版（[jev-chat-jarvis-mac](https://github.com/ismoshushi/jev-chat-jarvis-mac)）是各自独立的仓库和安装包，不在本政策范围内，请分别查看它们自己的说明。
 
 如果你更习惯先看结论：本项目**不是**"零数据收集"产品——它确实会把你正在看的聊天文字发给一个第三方模型接口，但那个接口地址是你自己在设置里填的，不是作者的服务器。除此之外的数据只留在你手机里，删应用或点一键清空都能删干净。下面逐项说清楚"发了什么、发给谁、什么时候发、存在哪、怎么删"。
 
@@ -15,7 +15,7 @@
 - 截图本身从不上传，识别文字（OCR）全部在手机本地完成。
 - 密钥、设置、知识库、聊天历史都只存在手机本地的 App 私有目录，其它 App 读不到；卸载即清空。
 - 无广告，不使用 Cookie，不读通讯录、不读位置、不读其它 App 列表。
-- 自 v1.0.1 起集成了 **Google Analytics（Firebase Analytics）**做匿名使用统计（启动次数、页面访问、崩溃率等），**不采集任何聊天内容**，详见第 2 节末尾的说明。
+- 自 v1.0.1 起集成了 **Google Analytics（Firebase Analytics）**做匿名使用统计（启动次数、页面访问、崩溃率等），**不采集任何聊天内容**。
 
 ## 2. 会离开你设备的数据
 
@@ -71,9 +71,9 @@ API 密钥会作为请求头（`Authorization`）随对应请求发给你自己�
 - 不自动发送消息：程序只把候选回复填进输入框，最后一步永远由你手动点发送。
 - 不碰转账、红包、收款相关操作。
 - 只处理你自己设备上、你自己有权查看的聊天，不处理其它人的设备。
-- 无广告、无第三方分析或统计 SDK（不含 Google Analytics、Firebase、友盟等）、不使用 Cookie 或广告标识符。
+- 无广告、不使用 Cookie 或广告标识符；集成的第三方组件只有 Google Analytics（Firebase Analytics）匿名统计（见第 1 节）。
 - 作者不运营任何服务器，不接收、不留存、不出售、不用于训练任何模型你的聊天内容——因为这些内容压根不经过作者。
-- 开源：以上每一条说法，都可以在 GitHub 仓库里对照源码核实：https://github.com/jev-chat/jev-chat-jarvis
+- 开源：以上每一条说法，都可以在 GitHub 仓库里对照源码核实：https://github.com/ismoshushi/jev-chat-jarvis
 
 ## 6. 你的控制权
 
@@ -94,11 +94,11 @@ API 密钥会作为请求头（`Authorization`）随对应请求发给你自己�
 
 ## 9. 变更
 
-本政策如有修改，会同步更新本文件（GitHub 仓库）与官网 https://chatjevs.com/privacy.html 上的版本；涉及数据处理方式的重大变更，会在对应版本的发布说明（Release Notes / CHANGELOG）中提示。建议以仓库中的最新版本为准。
+本政策如有修改，会同步更新 GitHub 仓库中的本文件（https://github.com/ismoshushi/jev-chat-jarvis）；涉及数据处理方式的重大变更，会在对应版本的发布说明（Release Notes / CHANGELOG）中提示。建议以仓库中的最新版本为准。
 
 ## 10. 联系
 
-- GitHub Issues：https://github.com/jev-chat/jev-chat-jarvis/issues
+- GitHub Issues：https://github.com/ismoshushi/jev-chat-jarvis/issues
 - 公众号私信（二维码见仓库 README）
 
 ---
@@ -111,9 +111,9 @@ Jev Chat Assistant (Android) reads the chat you are currently viewing on your de
 - **Chat text goes only to your own configured model endpoint**, along with a relationship description you write, optionally matched knowledge-base notes/contact notes, and optionally recent history for that contact (default 30 messages, 0–100 adjustable, off by default).
 - **Screenshots are never uploaded.** When a chat app's accessibility tree lacks readable text (e.g. Feishu), the screen is captured and OCR'd entirely on-device; the image is processed in memory and discarded, never saved or sent anywhere.
 - **Local-only storage**: API keys, endpoint settings, knowledge-base notes/contacts, and (if enabled) per-contact chat history live only in the app's private storage on your device. Nothing syncs to the cloud. Uninstalling the app deletes all of it; a one-tap "clear knowledge base & history" option is also available.
-- **No ads, no third-party analytics SDKs (no Google Analytics, Firebase, etc.), no cookies or advertising identifiers.**
+- **No ads, no cookies, no advertising identifiers.** The only third-party component is Google Analytics (Firebase Analytics) for anonymous usage statistics (see Section 1); chat content is never collected by it.
 - The app never sends messages automatically — you always press send yourself — and it never touches money transfers, red packets, or payments.
-- The project is open source; every claim above can be verified against the source at https://github.com/jev-chat/jev-chat-jarvis.
+- The project is open source; every claim above can be verified against the source at https://github.com/ismoshushi/jev-chat-jarvis.
 - Third-party model providers you choose to use are governed by their own privacy policies, which you should review separately.
 
-Version 1.1, effective 2026-09-26. Scope: Android app only.
+Version 1.0.1, effective 2026-09-26. Scope: Android app only.

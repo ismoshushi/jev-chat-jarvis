@@ -32,6 +32,10 @@
             android:name=".KnowledgeActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".PrivacyActivity"
+            android:exported="false" />
+
         <service
             android:name="com.google.android.accessibility.selecttospeak.SelectToSpeakService"
             android:exported="true"

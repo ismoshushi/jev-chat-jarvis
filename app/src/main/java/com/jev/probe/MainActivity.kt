@@ -132,7 +132,7 @@ class MainActivity : AppCompatActivity() {
     /** One tappable line under the readiness card, opening the privacy policy page. */
     private fun privacyHint(): View = text("读取的聊天内容只发往你自己配置的接口 · 隐私政策", 11f, sub).apply {
         setPadding(dp(2), dp(8), 0, 0)
-        setOnClickListener { openUrl(PRIVACY_URL) }
+        setOnClickListener { this@MainActivity.startActivity(Intent(this@MainActivity, PrivacyActivity::class.java)) }
     }
 
     /** Opens an external link; swallows the failure with a toast rather than crashing. */
@@ -243,9 +243,5 @@ class MainActivity : AppCompatActivity() {
         val enabled = Settings.Secure.getString(contentResolver,
             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: return false
         return enabled.contains(a11yComponent)
-    }
-
-    companion object {
-        private const val PRIVACY_URL = "https://chatjevs.com/privacy.html"
     }
 }

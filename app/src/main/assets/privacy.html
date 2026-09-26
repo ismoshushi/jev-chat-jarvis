@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>隐私政策 · Jev 聊天助手</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    background: #f2f3f5; color: #23272e; line-height: 1.85; padding: 20px 16px 56px;
+  }
+  .wrap { max-width: 640px; margin: 0 auto; }
+  .hero { background: #1d3557; color: #fff; border-radius: 16px; padding: 26px 22px; }
+  .hero h1 { font-size: 23px; margin-bottom: 10px; }
+  .hero p { font-size: 14px; color: #e2e9f4; }
+  .chips { margin-top: 12px; }
+  .chip {
+    display: inline-block; background: rgba(255,255,255,.15); color: #fff;
+    border-radius: 999px; padding: 2px 12px; font-size: 12px; margin: 3px 6px 3px 0;
+  }
+  .card {
+    background: #fff; border-radius: 14px; padding: 20px 18px 16px; margin-top: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.05);
+  }
+  h2 { font-size: 17px; color: #1d3557; margin-bottom: 8px; }
+  p { margin: 6px 0; font-size: 14px; }
+  ul { padding-left: 20px; margin: 6px 0; }
+  li { margin: 5px 0; font-size: 14px; }
+  b, strong { color: #111; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; }
+  th, td { border: 1px solid #e5e7eb; padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: #f5f7fa; color: #1d3557; white-space: nowrap; }
+  a { color: #2563eb; text-decoration: none; word-break: break-all; }
+  .foot { text-align: center; font-size: 12px; color: #98a0aa; margin-top: 26px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <h1>隐私政策</h1>
+    <p>Jev 聊天助手在你的手机上读取你正在看的聊天，把内容发给你自己配置的模型接口，帮你做判断、起草回复。作者不运营服务器，收不到你的任何数据。</p>
+    <div class="chips">
+      <span class="chip">版本 v1.0.1</span>
+      <span class="chip">2026-09-26 起生效</span>
+      <span class="chip">只管安卓版</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>1. 一句话总览</h2>
+    <ul>
+      <li>会离开手机的，只有「用于生成判断和回复」的聊天文字和背景信息，只发往<b>你自己在设置页填的接口地址</b>。</li>
+      <li>作者不运营任何服务器，你的聊天内容作者看不到、拿不到。</li>
+      <li>截图不上传，文字识别全在手机本地完成。</li>
+      <li>密钥、设置、知识库、聊天记录都只存在手机里，卸载即清空。</li>
+      <li>无广告、无 Cookie，不读通讯录、位置和其它 App 列表。</li>
+      <li>集成了谷歌的匿名统计，只记打开次数和崩溃，<b>不碰任何聊天内容</b>（见第 5 条）。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>2. 什么数据会发出去</h2>
+    <p>只发往一个地方：<b>你自己在设置页配置的模型接口地址</b>。默认走 OpenRouter 中转，可以换成 DeepSeek 官方、通义千问兼容接口，或任意你信任的接口。</p>
+    <table>
+      <tr><th>发什么</th><th>什么时候发</th></tr>
+      <tr><td>当前聊天窗口最近约 10 条消息的文字，加上你填的关系说明、笔记、历史记录（都可在设置里关）</td><td>你触发一次分析时</td></tr>
+      <tr><td>同样的文字，加上起草回复用的提示词</td><td>判断完成后，帮你写候选回复时</td></tr>
+    </table>
+    <p><b>不会发的</b>：截图本身、通讯录、设备识别码、位置信息、你装了哪些 App。</p>
+    <p>你填的接口是哪家，就受哪家的隐私政策管（比如 OpenRouter 的政策在 openrouter.ai/privacy），作者管不了它们。</p>
+  </div>
+
+  <div class="card">
+    <h2>3. 什么只存在手机里</h2>
+    <p>下面这些全部存在 App 的私有目录里，别的 App 读不到：</p>
+    <ul>
+      <li><b>API 密钥和接口设置</b> —— 连你自己的 AI 服务用；</li>
+      <li><b>你的各种开关和设置</b> —— 记住你的使用习惯；</li>
+      <li><b>知识库笔记和联系人档案</b> —— 你手动写的背景资料；</li>
+      <li><b>聊天记录</b> —— 默认关闭，开了才开始记。</li>
+    </ul>
+    <p>卸载 App，上面这些全部清空，没有云端备份。设置页里也有「清空知识库与历史」按钮，随时一键删。</p>
+  </div>
+
+  <div class="card">
+    <h2>4. 权限都用在哪</h2>
+    <table>
+      <tr><th>权限</th><th>用来做什么</th><th>不做什么</th></tr>
+      <tr><td>无障碍</td><td>读出当前聊天窗口的文字，把选中的回复填进输入框</td><td>不替你点发送，不碰转账红包</td></tr>
+      <tr><td>悬浮窗</td><td>在聊天上方显示分析小面板</td><td>不偷看别的界面</td></tr>
+      <tr><td>网络</td><td>连你自己填的接口 + 匿名统计上报</td><td>不连作者的任何服务器</td></tr>
+      <tr><td>通知</td><td>保持后台服务不被系统杀掉</td><td>不发营销通知</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>5. 关于匿名统计</h2>
+    <p>App 里用了谷歌的匿名统计（Firebase Analytics），只记录：App 打开了几次、哪个页面看得多、有没有崩溃。</p>
+    <p><b>它不会记录</b>：你的聊天文字、截图、笔记、密钥、你填的接口地址。</p>
+    <p>谷歌怎么处理这些数据，见 <a href="https://policies.google.com/privacy">policies.google.com/privacy</a>。不放心的话：断网时功能照样全好使，只是统计不上报。</p>
+  </div>
+
+  <div class="card">
+    <h2>6. 我们不做的事</h2>
+    <ul>
+      <li>不自动发消息：最后一下永远是你自己点发送。</li>
+      <li>不碰转账、红包、收款。</li>
+      <li>只处理你自己手机上、你自己能看到的聊天。</li>
+      <li>无广告、无跟踪。</li>
+      <li>你的聊天内容不经过作者：不接收、不留存、不拿来训练。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>7. 你可以怎么控制</h2>
+    <ul>
+      <li>关掉「记录聊天历史」开关，之后不再新增记录。</li>
+      <li>「清空知识库与历史」一键删除笔记和记录。</li>
+      <li>接口地址、密钥随时可以换。</li>
+      <li>卸载 App，所有数据立刻清空，没有需要注销的账号。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>8. 儿童</h2>
+    <p>这个工具是给成年人用的，不给 13 岁以下的小孩用。</p>
+  </div>
+
+  <div class="card">
+    <h2>9. 政策变了怎么办</h2>
+    <p>有改动就更新仓库里的这个页面：<a href="https://github.com/ismoshushi/jev-chat-jarvis">github.com/ismoshushi/jev-chat-jarvis</a>。大的改动会在更新日志里说明，以仓库里的最新版为准。</p>
+  </div>
+
+  <div class="card">
+    <h2>10. 联系我们</h2>
+    <p>GitHub Issues：<a href="https://github.com/ismoshushi/jev-chat-jarvis/issues">github.com/ismoshushi/jev-chat-jarvis/issues</a></p>
+  </div>
+
+  <div class="card">
+    <h2>English summary</h2>
+    <ul>
+      <li>Jev Chat Assistant reads the chat currently on your screen and sends that text <b>only to the AI endpoint you configure yourself</b>. The author runs no servers and never sees your chats.</li>
+      <li>Screenshots never leave the device. Keys, notes and chat history stay on the phone and are wiped on uninstall — no cloud backup.</li>
+      <li>The app contains Google Analytics (Firebase Analytics) for anonymous usage stats (opens, page views, crashes). It never collects chat content.</li>
+      <li>No ads, no cookies. The app never sends messages automatically — you always press send yourself.</li>
+      <li>Open source, verify everything in the code: <a href="https://github.com/ismoshushi/jev-chat-jarvis">github.com/ismoshushi/jev-chat-jarvis</a></li>
+    </ul>
+    <p>Version 1.0.1, effective 2026-09-26. Android app only.</p>
+  </div>
+
+  <p class="foot">Jev 聊天助手 · 隐私政策 v1.0.1 · 2026-09-26</p>
+</div>
+</body>
+</html>

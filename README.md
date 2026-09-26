@@ -6,13 +6,13 @@
 
 ## 与原项目的差异
 
-- **适配了更多通用聊天软件**：气泡面板一键「截屏分析」/「粘贴分析」，未专门适配的聊天 App 也能用；QQ、X、飞书保持自动读取与一键填入。
+- **适配了更多通用聊天软件**：一键「截屏分析」/「粘贴分析」，未专门适配的聊天 App 也能用；QQ、X、飞书保持自动读取与一键填入。
 
 ## 效果演示
 
-| 截屏分析（未适配 App，Soul） | 粘贴分析（防截屏 App，微信群） |
+| 截屏分析（未适配 App） | 粘贴分析（防截屏 App） |
 | --- | --- |
-| ![Soul 截屏分析](docs/images/demo-soul.png) | ![微信群粘贴分析](docs/images/demo-wechat-group.jpg) |
+| ![截屏分析](docs/images/demo-soul.png) | ![粘贴分析](docs/images/demo-wechat-group.jpg) |
 
 ## 测试与免责声明
 

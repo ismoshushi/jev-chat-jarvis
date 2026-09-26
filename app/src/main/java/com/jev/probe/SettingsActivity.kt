@@ -392,12 +392,22 @@ class SettingsActivity : AppCompatActivity() {
         // =================== 关于与隐私 ===================
         root.addView(section("关于与隐私"))
         val aboutCard = card()
-        aboutCard.addView(text(
+        val aboutDesc = text(
             "这个 App 会读取你当前聊天窗口的文字，发给你自己配置的模型接口做判断和起草回复。作者不运营服务器，收不到你的数据。",
-            12f, sub))
-        aboutCard.addView(cardBtn("隐私政策") { openUrl(PRIVACY_URL) })
+            13f, sub)
+        aboutDesc.setLineSpacing(dp(4).toFloat(), 1.0f)
+        aboutDesc.setPadding(0, dp(10), 0, dp(8))
+        aboutCard.addView(aboutDesc)
+
+        val aboutDivider = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1))
+                .apply { topMargin = dp(6); bottomMargin = dp(12) }
+            setBackgroundColor(Color.parseColor("#ECEDEF"))
+        }
+        aboutCard.addView(aboutDivider)
+        aboutCard.addView(cardBtn("隐私政策") { startActivity(android.content.Intent(this, PrivacyActivity::class.java)) })
         aboutCard.addView(cardBtn("开源仓库") { openUrl(REPO_URL) })
-        aboutCard.addView(text(versionLabel(), 11f, sub).apply { setPadding(0, dp(10), 0, dp(2)) })
+        aboutCard.addView(text(versionLabel(), 11f, sub).apply { setPadding(0, dp(12), 0, dp(2)) })
         root.addView(aboutCard)
 
         // =================== 保存 ===================
@@ -675,7 +685,8 @@ class SettingsActivity : AppCompatActivity() {
         private const val SCRATCH_REPLY = "jev_probe_scratch_reply"
         private const val SCRATCH_VISION = "jev_probe_scratch_vision"
 
-        private const val PRIVACY_URL = "https://chatjevs.com/privacy.html"
+        private const val PRIVACY_URL =
+            "https://github.com/ismoshushi/jev-chat-jarvis/blob/main/PRIVACY.md"
         private const val REPO_URL = "https://github.com/ismoshushi/jev-chat-jarvis"
     }
 }
