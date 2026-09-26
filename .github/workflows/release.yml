@@ -55,6 +55,8 @@ jobs:
             echo "keyAlias=$KEY_ALIAS"
             echo "keyPassword=$KEY_PASS"
           } > "$RUNNER_TEMP/keystore.properties"
+          echo "keystore bytes: $(wc -c < "$RUNNER_TEMP/keystore.jks"), sha256: $(sha256sum "$RUNNER_TEMP/keystore.jks" | cut -d' ' -f1)"
+          keytool -list -keystore "$RUNNER_TEMP/keystore.jks" -storepass "$STORE_PASS" -alias "$KEY_ALIAS"
 
       - name: Build signed release APK
         if: env.HAS_KEY == 'true'
@@ -62,14 +64,30 @@ jobs:
           JEV_KEYSTORE_PROPS: ${{ runner.temp }}/keystore.properties
           VERSION_CODE: ${{ github.run_number }}
           VERSION_NAME: ${{ github.ref_name }}
-        run: ./gradlew assembleRelease --no-daemon
+        run: |
+          set -o pipefail
+          ./gradlew assembleRelease --no-daemon 2>&1 | tee gradle_output.txt
 
       - name: Build debug APK (no signing secrets set yet)
         if: env.HAS_KEY != 'true'
         env:
           VERSION_CODE: ${{ github.run_number }}
           VERSION_NAME: ${{ github.ref_name }}
-        run: ./gradlew assembleDebug --no-daemon
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --no-daemon 2>&1 | tee gradle_output.txt
+
+      # CI logs are admin-only via the API; mirror the tail of a failed build
+      # into a public issue so the error is readable without a PAT.
+      - name: Report build failure as issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title "CI build failed on ${{ github.ref_name }} (run ${{ github.run_number }})" \
+            --body "$(tail -60 gradle_output.txt 2>/dev/null || echo 'no gradle output captured')" \
+            --repo "${{ github.repository }}" || true
 
       - name: Create GitHub Release with APK
         env:
